@@ -1,0 +1,126 @@
+#include <Wire.h> 
+#include <LiquidCrystal_I2C.h>
+LiquidCrystal_I2C lcd(0x27,16,2);
+
+
+#include <Adafruit_Sensor.h> 
+
+#include <Adafruit_ADXL345_U.h>
+
+Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified();
+
+#include "HX711.h"
+
+#define LOADCELL_DOUT_PIN  2
+#define LOADCELL_SCK_PIN  3
+const int button=4;
+int bstate=0;
+
+HX711 scale;
+ 
+float calibration_factor = 211000; //-71000 worked for my 440lb max scale setup //-751000
+
+void setup() {
+  pinMode(button,INPUT);
+  Serial.begin(9600);
+    lcd.init();
+  lcd.backlight();
+   
+  scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
+  scale.set_scale();
+  scale.tare(); //Reset the scale to 0
+  
+  long zero_factor = scale.read_average(); //Get a baseline reading
+  Serial.print("Zero factor: "); //This can be used to remove the need to tare the scale. Useful in permanent scale projects.
+  Serial.println(zero_factor);
+
+   if(!accel.begin())
+
+   {
+
+      Serial.println("No valid sensor found");
+
+      while(1);
+
+   }
+
+ }
+
+void loop() {
+bstate=digitalRead(button);
+if(bstate==HIGH)
+{
+  lcd.setCursor(11,0);
+  lcd.print("WC");}
+
+if(bstate==LOW)
+{ lcd.setCursor(11,0);
+  lcd.print("WD");}
+  scale.set_scale(calibration_factor); //Adjust to this calibration factor
+  Serial.print("Reading: ");
+  Serial.print(scale.get_units(), 2);
+  
+  float load=scale.get_units() ;
+  Serial.print(" lbs"); //Change this to kg and re-adjust the calibration factor if you follow SI units like a sane person
+  Serial.print(" calibration_factor: ");
+  Serial.print(calibration_factor);
+
+ lcd.setCursor(0,0);
+    lcd.print(scale.get_units());
+    if(scale.get_units()>0.400 && scale.get_units()<0.500)
+    {
+       lcd.setCursor(7,0);
+    lcd.print("G:M");
+      }
+      else if(scale.get_units()>0.100 && scale.get_units()<0.150)
+{
+ // lcd.clear();
+     lcd.setCursor(7,0);
+    lcd.print("G:L");
+  }
+  else
+  {
+     lcd.setCursor(7,0);
+    lcd.print("G:N");
+    
+    }
+   sensors_event_t event; 
+
+   accel.getEvent(&event);
+   
+int x = event.acceleration.x;
+int y = event.acceleration.y;
+int z = event.acceleration.z;
+
+   Serial.print("X: "); Serial.print(event.acceleration.x); Serial.print("  ");
+
+   Serial.print("Y: "); Serial.print(event.acceleration.y); Serial.print("  ");
+
+   Serial.print("Z: "); Serial.print(event.acceleration.z); Serial.print("  ");
+
+   Serial.println("m/s^2 ");
+ 
+   if(y>8 || z<3)
+   {
+      lcd.setCursor(0,1);
+    lcd.print("person fallen ");
+    }
+    else 
+{
+    lcd.setCursor(0,1);
+    lcd.print("normal            ");  
+  }
+
+   delay(500);
+  
+   Serial.println();
+delay(1000);
+  if(Serial.available())
+  {
+    char temp = Serial.read();
+    if(temp == '+' || temp == 'a')
+      calibration_factor += 10;
+    else if(temp == '-' || temp == 'z')
+      calibration_factor -= 10;
+  }
+}
